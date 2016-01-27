@@ -70,26 +70,37 @@ func (g *Graphite) Description() string {
 func (g *Graphite) Write(metrics []telegraf.Metric) error {
 	// Prepare data
 	var bp []string
-	for _, point := range metrics {
+	for _, metric := range metrics {
 		// Get name
-		name := point.Name()
+		name := metric.Name()
 		// Convert UnixNano to Unix timestamps
-		timestamp := point.UnixNano() / 1000000000
+		timestamp := metric.UnixNano() / 1000000000
 
-		for field_name, value := range point.Fields() {
+		for field_name, value := range metric.Fields() {
+			var tag_str string
+			for tag_key, tag_value := range metric.Tags() {
+				tag_value := strings.Replace(tag_value, ".", "_", -1)
+				if tag_key == "host" {
+					tag_str = tag_value + "." + tag_str
+				} else {
+					tag_str += "." + tag_value
+				}
+			}
+			tag_str = strings.Trim(tag_str, ".")
+			tag_str = strings.Replace(tag_str, "..", ".", -1)
 			// Convert value
 			value_str := fmt.Sprintf("%#v", value)
-			// Write graphite point
+			// Write graphite metric
 			var graphitePoint string
 			if name == field_name {
 				graphitePoint = fmt.Sprintf("%s.%s %s %d\n",
-					strings.Replace(point.Tags()["host"], ".", "_", -1),
+					tag_str,
 					strings.Replace(name, ".", "_", -1),
 					value_str,
 					timestamp)
 			} else {
 				graphitePoint = fmt.Sprintf("%s.%s.%s %s %d\n",
-					strings.Replace(point.Tags()["host"], ".", "_", -1),
+					tag_str,
 					strings.Replace(name, ".", "_", -1),
 					strings.Replace(field_name, ".", "_", -1),
 					value_str,
@@ -99,7 +110,6 @@ func (g *Graphite) Write(metrics []telegraf.Metric) error {
 				graphitePoint = fmt.Sprintf("%s.%s", g.Prefix, graphitePoint)
 			}
 			bp = append(bp, graphitePoint)
-			//fmt.Printf(graphitePoint)
 		}
 	}
 	graphitePoints := strings.Join(bp, "")
